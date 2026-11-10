@@ -1,50 +1,40 @@
-import serial
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.animation import FuncAnimation
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_HMC5883_U.h>
 
-# ÇÖZÜM 1: timeout=0.1 eklendi. Böylece veri gelmezse Python kilitlenmez.
-ser = serial.Serial('COM6', 9600, timeout=0.1)
+Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
 
-fig = plt.figure(figsize=(12, 6))
-ax1 = fig.add_subplot(121) # Zaman serisi için
-ax2 = fig.add_subplot(122, projection='3d') # 3B Vektör için
+const int ledPin = 13;      
+const float threshold = 500.0; 
 
-times, total_b = [], []
+void setup() {
+  Serial.begin(9600);
+  pinMode(ledPin, OUTPUT);
+  if(!mag.begin()) {
+    while(1);
+  }
+}
 
-def update(i):
-    # Eğer port kapalıysa veya hata varsa program çökmesin diye try-except içine aldık
-    try:
-        line = ser.readline().decode('utf-8').strip()
-        if line:
-            # Gelen veriyi siyah ekranda da görelim ki Arduino'dan ne geldiğinden emin olalım
-            print("Gelen Veri:", line) 
-            
-            # Gelen veriyi 5 parçaya böl [t, x, y, z, |B|][cite: 1]
-            t, x, y, z, b_mag = [float(val) for val in line.split(',')]
-            
-            # Zaman Serisi Grafiği (Zorunlu Çıktı)[cite: 1]
-            times.append(t / 1000)
-            total_b.append(b_mag)
-            ax1.cla()
-            ax1.plot(times[-50:], total_b[-50:], 'r-')
-            ax1.set_title(f"Alan Siddeti: {b_mag:.2f} uT")
-            
-            # 3B Vektör (Quiver) Gösterimi[cite: 1]
-            ax2.cla()
-            # Vektör boyutunu büyütmek için length=1.0 yaptık
-            ax2.quiver(0, 0, 0, x, y, z, length=1.0, normalize=True)
-            ax2.set_xlim([-1, 1]); ax2.set_ylim([-1, 1]); ax2.set_zlim([-1, 1])
-            ax2.set_title("Manyetik Alan Yonu")
-            
-    except ValueError as e:
-        # Eğer Arduino'dan eksik virgül gelirse burası çalışır ve hatayı gösterir
-        print("Veri ayirma hatasi (Beklenen 5 deger gelmedi):", e)
-    except Exception as e:
-        print("Bilinmeyen Hata:", e)
+void loop() {
+  sensors_event_t event; 
+  mag.getEvent(&event);
 
-# interval=50 (50 milisaniyede bir günceller)
-ani = FuncAnimation(fig, update, interval=50)
+  float x = event.magnetic.x;
+  float y = event.magnetic.y;
+  float z = event.magnetic.z;
+  float totalB = sqrt(x*x + y*y + z*z);
 
-# ÇÖZÜM 2: Grafiği ekranda tutmak için block=True kullanmak garanti yöntemdir
-plt.show(block=True)
+  Serial.print(millis()); Serial.print(",");
+  Serial.print(x); Serial.print(",");
+  Serial.print(y); Serial.print(",");
+  Serial.print(z); Serial.print(",");
+  Serial.println(totalB);
+
+  if(totalB > threshold) {
+    digitalWrite(ledPin, HIGH);
+  } else {
+    digitalWrite(ledPin, LOW);
+  }
+
+  delay(200); 
+}
